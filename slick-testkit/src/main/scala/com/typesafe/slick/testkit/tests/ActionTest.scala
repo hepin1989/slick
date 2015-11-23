@@ -18,7 +18,7 @@ class ActionTest extends AsyncTest[RelationalTestDB] {
     for {
       _ <- db.run {
         ts.schema.create >>
-        (ts ++= Seq(2, 3, 1, 5, 4))
+          (ts ++= Seq(2, 3, 1, 5, 4))
       }
       q1 = ts.sortBy(_.a).map(_.a)
       f1 = db.run(q1.result)
@@ -80,8 +80,8 @@ class ActionTest extends AsyncTest[RelationalTestDB] {
 
     val p1 = db.stream {
       ts.schema.create >>
-      (ts ++= Seq(2, 3, 1, 5, 4)) >>
-      q1.result
+        (ts ++= Seq(2, 3, 1, 5, 4)) >>
+        q1.result
     }
 
     for {
@@ -128,20 +128,48 @@ class ActionTest extends AsyncTest[RelationalTestDB] {
   }
 
   def testZipWith = {
-      class T(tag: Tag) extends Table[Int](tag, u"t") {
-        def a = column[Int]("a")
-        def * = a
-      }
-      val ts = TableQuery[T]
-
-      for {
-        _ <- db.run {
-          ts.schema.create >>
-            (ts ++= Seq(2, 3, 1, 5, 4))
-        }
-        q1 = ts.sortBy(_.a).map(_.a).take(1)
-        result <- db.run(q1.result.head.zipWith(q1.result.head)({ case (a, b) => a + b }))
-        _ = result shouldBe 2
-      } yield ()
+    class T(tag: Tag) extends Table[Int](tag, u"t") {
+      def a = column[Int]("a")
+      def * = a
     }
+    val ts = TableQuery[T]
+
+    for {
+      _ <- db.run {
+        ts.schema.create >>
+          (ts ++= Seq(2, 3, 1, 5, 4))
+      }
+      q1 = ts.sortBy(_.a).map(_.a).take(1)
+      result <- db.run(q1.result.head.zipWith(q1.result.head)({ case (a, b) => a + b }))
+      _ = result shouldBe 2
+    } yield ()
+  }
+
+  def testCollect = {
+    class T(tag: Tag) extends Table[Int](tag, u"t") {
+      def a = column[Int]("a")
+
+      def * = a
+    }
+    val ts = TableQuery[T]
+    for {
+      _ <- db.run {
+        ts.schema.create >>
+          (ts ++= Seq(2, 3, 1, 5, 4))
+      }
+      q1 = ts.sortBy(_.a).map(_.a).take(1)
+      result <- db.run(q1.result.headOption.collect {
+        case Some(a) => a
+      })
+      _ = result shouldBe 1
+      _ = result shouldFail { _ =>
+        val future = db.run(q1.result.headOption.collect {
+          case None => ()
+        })
+        import scala.concurrent.duration.Duration
+        import scala.concurrent.Await
+        Await.result(future, Duration.Inf)
+      }
+    } yield ()
+  }
 }
